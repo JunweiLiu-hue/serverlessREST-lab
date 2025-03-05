@@ -3,6 +3,7 @@ import * as lambdanode from "aws-cdk-lib/aws-lambda-nodejs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as custom from "aws-cdk-lib/custom-resources";
+import * as apig from "aws-cdk-lib/aws-apigateway";
 import { Construct } from "constructs";
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { generateBatch } from "../shared/util";
@@ -19,7 +20,6 @@ export class RestAPIStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       tableName: "Movies",
     });
-
     
     // Functions 
     const getMovieByIdFn = new lambdanode.NodejsFunction(
@@ -52,6 +52,32 @@ export class RestAPIStack extends cdk.Stack {
             REGION: 'eu-west-1',
           },
         }
+        );
+
+        const api = new apig.RestApi(this, "RestAPI", {
+          description: "demo api",
+          deployOptions: {
+            stageName: "dev",
+          },
+          defaultCorsPreflightOptions: {
+            allowHeaders: ["Content-Type", "X-Amz-Date"],
+            allowMethods: ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+            allowCredentials: true,
+            allowOrigins: ["*"],
+          },
+        });
+    
+        // Movies endpoint
+        const moviesEndpoint = api.root.addResource("movies");
+        moviesEndpoint.addMethod(
+          "GET",
+          new apig.LambdaIntegration(getAllMoviesFn, { proxy: true })
+        );
+        // Detail movie endpoint
+        const specificMovieEndpoint = moviesEndpoint.addResource("{movieId}");
+        specificMovieEndpoint.addMethod(
+          "GET",
+          new apig.LambdaIntegration(getMovieByIdFn, { proxy: true })
         );
         
         new custom.AwsCustomResource(this, "moviesddbInitData", {
